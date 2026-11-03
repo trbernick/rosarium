@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rosarium</title>
+<meta name="description" content="Den Rosenkranz beten – auf Deutsch, Englisch und Latein.">
+<meta name="theme-color" content="#ECEFF4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1221" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rosarium">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Alegreya+Sans:wght@400;500;700&display=swap">
+<style>
+/* Layout: bead diagram as a map on the left (top on phones), the current prayer as a page of text, a fixed bar to step forward. */
+:root {
+  --bg: #ECEFF4;
+  --surface: #F7F8FB;
+  --fg: #17203A;
+  --muted: #5B6681;
+  --line: #C6CEDC;
+  --accent: #2A4896;
+  --gold: #A27A27;
+  --halo: rgba(162, 122, 39, .22);
+  --f-display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --f-text: "EB Garamond", Garamond, "Times New Roman", serif;
+  --f-ui: "Alegreya Sans", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1221; --surface: #151C30; --fg: #E3E6EF; --muted: #97A1BB;
+    --line: #2B3553; --accent: #8DA5EC; --gold: #D8B462; --halo: rgba(216, 180, 98, .22);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1221; --surface: #151C30; --fg: #E3E6EF; --muted: #97A1BB;
+  --line: #2B3553; --accent: #8DA5EC; --gold: #D8B462; --halo: rgba(216, 180, 98, .22);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  -webkit-user-select: none;
+  user-select: none;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--f-ui);
+  font-size: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: 0;
+}
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 20px 120px; display: flex; flex-direction: column; gap: 20px; }
+
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.35rem; letter-spacing: .14em; color: var(--accent); margin: 0; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); }
+.seg button {
+  font: 500 .85rem/1 var(--f-ui); letter-spacing: .06em; border: 0; background: transparent; color: var(--muted);
+  padding: 8px 14px; border-radius: 999px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+
+.settings { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; font-size: .9rem; color: var(--muted); }
+.settings label { display: inline-flex; align-items: center; gap: 8px; }
+select, .ghost {
+  font: 500 .9rem var(--f-ui); color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; cursor: pointer;
+}
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+.ghost:hover, select:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 40px; align-items: start; }
+.map { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+.map svg { width: 100%; height: auto; max-height: 78vh; display: block; }
+.string { fill: none; stroke: var(--line); stroke-width: 1.2; }
+.bead { cursor: pointer; }
+.bead .hit { fill: transparent; }
+.bead .b { fill: var(--surface); stroke: var(--muted); stroke-width: 1.1; transition: fill .25s, stroke .25s; }
+.bead.done .b { fill: var(--accent); stroke: var(--accent); }
+.bead.cur .b { fill: var(--gold); stroke: var(--gold); }
+.bead:hover .b { stroke: var(--gold); }
+.cross { stroke: var(--muted); stroke-width: 5; stroke-linecap: square; fill: none; }
+.bead.done .cross { stroke: var(--accent); }
+.bead.cur .cross { stroke: var(--gold); }
+.halo { fill: var(--halo); transition: cx .3s, cy .3s; }
+
+.prayer { min-width: 0; cursor: pointer; padding-top: 8px; -webkit-tap-highlight-color: transparent; }
+.eyebrow { font: 700 .78rem var(--f-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); margin: 0 0 10px; }
+.titlerow { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+h2 { font-family: var(--f-display); font-weight: 500; font-size: clamp(1.5rem, 3.4vw, 2.1rem); line-height: 1.2; margin: 0; text-wrap: balance; color: var(--fg); }
+.count { font: 500 1.6rem var(--f-display); color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.count small { font-size: .9rem; color: var(--muted); }
+.body { font-family: var(--f-text); font-size: clamp(1.2rem, 2.3vw, 1.42rem); line-height: 1.6; max-width: 34em; margin-top: 22px; display: flex; flex-direction: column; gap: .7em; }
+.body p { margin: 0; }
+.body em { color: var(--accent); }
+.vr { font-family: var(--f-display); font-size: .8em; color: var(--gold); margin-right: .35em; }
+.meta { font: 500 .95rem var(--f-ui); color: var(--muted); letter-spacing: .02em; }
+.trans { font-family: var(--f-text); font-style: italic; color: var(--muted); font-size: 1.08rem; line-height: 1.55; max-width: 38em; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: .6em; }
+.trans p { margin: 0; }
+.trans em { color: inherit; font-style: normal; }
+.hint { margin-top: 28px; font-size: .85rem; color: var(--muted); }
+.fade { animation: fade .35s ease; }
+@keyframes fade { from { opacity: .35; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.bar-in { max-width: 1040px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; }
+.bar button {
+  font: 700 1rem var(--f-ui); letter-spacing: .04em; border-radius: 10px; padding: 12px 22px; cursor: pointer; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); min-width: 110px;
+}
+.bar #next { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.bar button:disabled { opacity: .4; cursor: default; }
+.progress { display: flex; flex-direction: column; gap: 6px; align-items: center; font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
+.track { width: 100%; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.track i { display: block; height: 100%; background: var(--gold); width: 0; transition: width .3s; }
+
+@media (max-width: 780px) {
+  .app { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .map { position: static; }
+  .map svg { max-height: 30vh; }
+  .bar button { min-width: 0; padding: 12px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade { animation: none; }
+  .halo, .bead .b, .track i { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1 class="brand">ROSARIUM</h1>
+    <div class="seg" role="group" aria-label="Language">
+      <button type="button" data-lang="de">DE</button>
+      <button type="button" data-lang="en">EN</button>
+      <button type="button" data-lang="la">LA</button>
+    </div>
+  </header>
+
+  <div class="settings">
+    <label><span data-ui="mysteries"></span> <select id="set"></select></label>
+    <label><span data-ui="translation"></span> <select id="trans"></select></label>
+    <label><input type="checkbox" id="fatima"> <span data-ui="fatima"></span></label>
+    <button type="button" class="ghost" id="restart" data-ui="restart"></button>
+  </div>
+
+  <div class="app">
+    <div class="map"><svg id="beads" viewBox="0 0 300 470" role="img" aria-label="Rosary"></svg></div>
+    <article class="prayer" id="prayer" aria-live="polite">
+      <p class="eyebrow" id="eyebrow"></p>
+      <div class="titlerow"><h2 id="name"></h2><div class="count" id="count"></div></div>
+      <div class="body" id="body"></div>
+      <div class="trans" id="transBody" hidden></div>
+      <p class="hint" data-ui="hint"></p>
+    </article>
+  </div>
+</div>
+
+<nav class="bar">
+  <div class="bar-in">
+    <button type="button" id="prev" data-ui="prev"></button>
+    <div class="progress"><span id="ptext"></span><div class="track"><i id="pbar"></i></div></div>
+    <button type="button" id="next" data-ui="next"></button>
+  </div>
+</nav>
+
+<script>
+const UI = {
+  de: { prev: "Zurück", next: "Weiter", amen: "Amen", mysteries: "Geheimnisse", translation: "Übersetzung", none: "Keine", fatima: "Fatima-Gebet", restart: "Neu beginnen", intro: "Eröffnung", conclusion: "Abschluss", hint: "Tippe auf den Text oder drücke die Leertaste, um weiterzugehen.", done: "Rosenkranz vollendet", days: ["So","Mo","Di","Mi","Do","Fr","Sa"] },
+  en: { prev: "Back", next: "Next", amen: "Amen", mysteries: "Mysteries", translation: "Translation", none: "None", fatima: "Fatima Prayer", restart: "Start over", intro: "Opening", conclusion: "Closing", hint: "Tap the text or press the space bar to continue.", done: "Rosary complete", days: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"] },
+  la: { prev: "Retro", next: "Porro", amen: "Amen", mysteries: "Mysteria", translation: "Versio", none: "Nulla", fatima: "Oratio Fatimae", restart: "Ab initio", intro: "Initium", conclusion: "Conclusio", hint: "Tange textum vel preme spatium ut pergas.", done: "Rosarium perfectum", days: ["Dom","Lun","Mar","Mer","Iov","Ven","Sat"] }
+};
+const LANG_NAMES = { de: "Deutsch", en: "English", la: "Latina" };
+
+const BOOKS = {
+  Lk: { de: "Lk", en: "Luke", la: "Lc" }, Mt: { de: "Mt", en: "Matthew", la: "Mt" }, Mk: { de: "Mk", en: "Mark", la: "Mc" },
+  Jn: { de: "Joh", en: "John", la: "Io" }, Acts: { de: "Apg", en: "Acts", la: "Act" }, Rev: { de: "Offb", en: "Revelation", la: "Ap" }
+};
+
+const SETS = {
+  joyful: {
+    days: [1, 6],
+    name: { de: "Freudenreiche Geheimnisse", en: "Joyful Mysteries", la: "Mysteria Gaudiosa" },
+    m: [
+      { de: "Die Verkündigung des Herrn", en: "The Annunciation", la: "Annuntiatio", ins: "den du, o Jungfrau, vom Heiligen Geist empfangen hast", ref: ["Lk", 1, "26–38"] },
+      { de: "Der Besuch Marias bei Elisabet", en: "The Visitation", la: "Visitatio", ins: "den du, o Jungfrau, zu Elisabet getragen hast", ref: ["Lk", 1, "39–56"] },
+      { de: "Die Geburt Jesu", en: "The Nativity", la: "Nativitas Domini", ins: "den du, o Jungfrau, geboren hast", ref: ["Lk", 2, "1–20"] },
+      { de: "Die Darstellung Jesu im Tempel", en: "The Presentation in the Temple", la: "Praesentatio in Templo", ins: "den du, o Jungfrau, im Tempel aufgeopfert hast", ref: ["Lk", 2, "22–38"] },
+      { de: "Das Wiederfinden Jesu im Tempel", en: "The Finding in the Temple", la: "Inventio in Templo", ins: "den du, o Jungfrau, im Tempel wiedergefunden hast", ref: ["Lk", 2, "41–52"] }
+    ]
+  },
+  luminous: {
+    days: [4],
+    name: { de: "Lichtreiche Geheimnisse", en: "Luminous Mysteries", la: "Mysteria Luminosa" },
+    m: [
+      { de: "Die Taufe Jesu im Jordan", en: "The Baptism of the Lord", la: "Baptisma in Iordane", ins: "der von Johannes getauft worden ist", ref: ["Mt", 3, "13–17"] },
+      { de: "Die Hochzeit zu Kana", en: "The Wedding at Cana", la: "Autorevelatio apud Canense matrimonium", ins: "der sich bei der Hochzeit in Kana offenbart hat", ref: ["Jn", 2, "1–11"] },
+      { de: "Die Verkündigung des Reiches Gottes", en: "The Proclamation of the Kingdom", la: "Regni Dei proclamatio", ins: "der uns das Reich Gottes verkündet hat", ref: ["Mk", 1, "14–15"] },
+      { de: "Die Verklärung Jesu", en: "The Transfiguration", la: "Transfiguratio", ins: "der auf dem Berg verklärt worden ist", ref: ["Lk", 9, "28–36"] },
+      { de: "Die Einsetzung der Eucharistie", en: "The Institution of the Eucharist", la: "Eucharistiae institutio", ins: "der uns die Eucharistie geschenkt hat", ref: ["Lk", 22, "14–20"] }
+    ]
+  },
+  sorrowful: {
+    days: [2, 5],
+    name: { de: "Schmerzhafte Geheimnisse", en: "Sorrowful Mysteries", la: "Mysteria Dolorosa" },
+    m: [
+      { de: "Die Todesangst Jesu am Ölberg", en: "The Agony in the Garden", la: "Agonia in Horto", ins: "der für uns Blut geschwitzt hat", ref: ["Lk", 22, "39–46"] },
+      { de: "Die Geißelung Jesu", en: "The Scourging at the Pillar", la: "Flagellatio", ins: "der für uns gegeißelt worden ist", ref: ["Jn", 19, "1"] },
+      { de: "Die Dornenkrönung", en: "The Crowning with Thorns", la: "Coronatio Spinis", ins: "der für uns mit Dornen gekrönt worden ist", ref: ["Mt", 27, "27–31"] },
+      { de: "Die Kreuztragung", en: "The Carrying of the Cross", la: "Baiulatio Crucis", ins: "der für uns das schwere Kreuz getragen hat", ref: ["Jn", 19, "17"] },
+      { de: "Die Kreuzigung und der Tod Jesu", en: "The Crucifixion and Death", la: "Crucifixio et Mors", ins: "der für uns gekreuzigt worden ist", ref: ["Lk", 23, "33–46"] }
+    ]
+  },
+  glorious: {
+    days: [0, 3],
+    name: { de: "Glorreiche Geheimnisse", en: "Glorious Mysteries", la: "Mysteria Gloriosa" },
+    m: [
+      { de: "Die Auferstehung Jesu", en: "The Resurrection", la: "Resurrectio", ins: "der von den Toten auferstanden ist", ref: ["Lk", 24, "1–12"] },
+      { de: "Die Himmelfahrt Jesu", en: "The Ascension", la: "Ascensio", ins: "der in den Himmel aufgefahren ist", ref: ["Acts", 1, "6–11"] },
+      { de: "Die Sendung des Heiligen Geistes", en: "The Descent of the Holy Spirit", la: "Descensus Spiritus Sancti", ins: "der uns den Heiligen Geist gesandt hat", ref: ["Acts", 2, "1–4"] },
+      { de: "Die Aufnahme Marias in den Himmel", en: "The Assumption of Mary", la: "Assumptio", ins: "der dich, o Jungfrau, in den Himmel aufgenommen hat", ref: null },
+      { de: "Die Krönung Marias im Himmel", en: "The Coronation of Mary", la: "Coronatio in Caelo", ins: "der dich, o Jungfrau, im Himmel gekrönt hat", ref: ["Rev", 12, "1"] }
+    ]
+  }
+};
+const SET_ORDER = ["joyful", "luminous", "sorrowful", "glorious"];
+
+const VIRTUES = {
+  de: ["der in uns den Glauben vermehre", "der in uns die Hoffnung stärke", "der in uns die Liebe entzünde"],
+  en: ["For an increase of faith", "For an increase of hope", "For an increase of charity"],
+  la: ["Pro fide", "Pro spe", "Pro caritate"]
+};
+const ORD = {
+  de: d => `${d + 1}. Gesätz`,
+  en: d => ["First", "Second", "Third", "Fourth", "Fifth"][d] + " Mystery",
+  la: d => ["Primum", "Secundum", "Tertium", "Quartum", "Quintum"][d] + " mysterium"
+};
+
+const NAMES = {
+  sign: { de: "Kreuzzeichen", en: "Sign of the Cross", la: "Signum Crucis" },
+  creed: { de: "Glaubensbekenntnis", en: "Apostles’ Creed", la: "Symbolum Apostolorum" },
+  pater: { de: "Vater unser", en: "Our Father", la: "Pater Noster" },
+  ave: { de: "Gegrüßet seist du, Maria", en: "Hail Mary", la: "Ave Maria" },
+  gloria: { de: "Ehre sei dem Vater", en: "Glory Be", la: "Gloria Patri" },
+  fatima: { de: "Fatima-Gebet", en: "Fatima Prayer", la: "Oratio Fatimae" },
+  salve: { de: "Salve Regina", en: "Hail, Holy Queen", la: "Salve Regina" },
+  oremus: { de: "Schlussgebet", en: "Closing Prayer", la: "Oratio" }
+};
+
+const TEXT = {
+  sign: {
+    de: ["Im Namen des Vaters und des Sohnes und des Heiligen Geistes. Amen."],
+    en: ["In the name of the Father, and of the Son, and of the Holy Spirit. Amen."],
+    la: ["In nomine Patris, et Filii, et Spiritus Sancti. Amen."]
+  },
+  creed: {
+    de: ["Ich glaube an Gott, den Vater, den Allmächtigen, den Schöpfer des Himmels und der Erde, und an Jesus Christus, seinen eingeborenen Sohn, unsern Herrn, empfangen durch den Heiligen Geist, geboren von der Jungfrau Maria, gelitten unter Pontius Pilatus, gekreuzigt, gestorben und begraben, hinabgestiegen in das Reich des Todes, am dritten Tage auferstanden von den Toten, aufgefahren in den Himmel; er sitzt zur Rechten Gottes, des allmächtigen Vaters; von dort wird er kommen, zu richten die Lebenden und die Toten.",
+         "Ich glaube an den Heiligen Geist, die heilige katholische Kirche, Gemeinschaft der Heiligen, Vergebung der Sünden, Auferstehung der Toten und das ewige Leben. Amen."],
+    en: ["I believe in God, the Father almighty, Creator of heaven and earth, and in Jesus Christ, his only Son, our Lord, who was conceived by the Holy Spirit, born of the Virgin Mary, suffered under Pontius Pilate, was crucified, died and was buried; he descended into hell; on the third day he rose again from the dead; he ascended into heaven, and is seated at the right hand of God the Father almighty; from there he will come to judge the living and the dead.",
+         "I believe in the Holy Spirit, the holy catholic Church, the communion of saints, the forgiveness of sins, the resurrection of the body, and life everlasting. Amen."],
+    la: ["Credo in Deum Patrem omnipotentem, Creatorem caeli et terrae. Et in Iesum Christum, Filium eius unicum, Dominum nostrum, qui conceptus est de Spiritu Sancto, natus ex Maria Virgine, passus sub Pontio Pilato, crucifixus, mortuus, et sepultus, descendit ad inferos, tertia die resurrexit a mortuis, ascendit ad caelos, sedet ad dexteram Dei Patris omnipotentis, inde venturus est iudicare vivos et mortuos.",
+         "Credo in Spiritum Sanctum, sanctam Ecclesiam catholicam, sanctorum communionem, remissionem peccatorum, carnis resurrectionem, vitam aeternam. Amen."]
+  },
+  pater: {
+    de: ["Vater unser im Himmel, geheiligt werde dein Name. Dein Reich komme. Dein Wille geschehe, wie im Himmel so auf Erden.",
+         "Unser tägliches Brot gib uns heute. Und vergib uns unsere Schuld, wie auch wir vergeben unsern Schuldigern. Und führe uns nicht in Versuchung, sondern erlöse uns von dem Bösen. Amen."],
+    en: ["Our Father, who art in heaven, hallowed be thy name; thy kingdom come, thy will be done on earth as it is in heaven.",
+         "Give us this day our daily bread, and forgive us our trespasses, as we forgive those who trespass against us; and lead us not into temptation, but deliver us from evil. Amen."],
+    la: ["Pater noster, qui es in caelis, sanctificetur nomen tuum. Adveniat regnum tuum. Fiat voluntas tua, sicut in caelo et in terra.",
+         "Panem nostrum quotidianum da nobis hodie, et dimitte nobis debita nostra, sicut et nos dimittimus debitoribus nostris. Et ne nos inducas in tentationem, sed libera nos a malo. Amen."]
+  },
+  gloria: {
+    de: ["Ehre sei dem Vater und dem Sohn und dem Heiligen Geist, wie im Anfang, so auch jetzt und alle Zeit und in Ewigkeit. Amen."],
+    en: ["Glory be to the Father, and to the Son, and to the Holy Spirit, as it was in the beginning, is now, and ever shall be, world without end. Amen."],
+    la: ["Gloria Patri, et Filio, et Spiritui Sancto. Sicut erat in principio, et nunc, et semper, et in saecula saeculorum. Amen."]
+  },
+  fatima: {
+    de: ["O mein Jesus, verzeih uns unsere Sünden, bewahre uns vor dem Feuer der Hölle, führe alle Seelen in den Himmel, besonders jene, die deiner Barmherzigkeit am meisten bedürfen."],
+    en: ["O my Jesus, forgive us our sins, save us from the fires of hell, lead all souls to heaven, especially those in most need of thy mercy."],
+    la: ["O mi Iesu, dimitte nobis debita nostra, libera nos ab igne inferni, conduc in caelum omnes animas, praesertim illas quae maxime indigent misericordia tua."]
+  },
+  salve: {
+    de: ["Sei gegrüßt, o Königin, Mutter der Barmherzigkeit, unser Leben, unsre Wonne und unsre Hoffnung, sei gegrüßt! Zu dir rufen wir verbannte Kinder Evas; zu dir seufzen wir trauernd und weinend in diesem Tal der Tränen.",
+         "Wohlan denn, unsre Fürsprecherin, wende deine barmherzigen Augen uns zu, und nach diesem Elend zeige uns Jesus, die gebenedeite Frucht deines Leibes. O gütige, o milde, o süße Jungfrau Maria.",
+         ["V.", "Bitte für uns, heilige Gottesmutter."], ["A.", "Auf dass wir würdig werden der Verheißungen Christi."]],
+    en: ["Hail, holy Queen, Mother of mercy, our life, our sweetness and our hope. To thee do we cry, poor banished children of Eve. To thee do we send up our sighs, mourning and weeping in this valley of tears.",
+         "Turn then, most gracious advocate, thine eyes of mercy toward us, and after this our exile, show unto us the blessed fruit of thy womb, Jesus. O clement, O loving, O sweet Virgin Mary.",
+         ["V.", "Pray for us, O holy Mother of God."], ["R.", "That we may be made worthy of the promises of Christ."]],
+    la: ["Salve, Regina, Mater misericordiae, vita, dulcedo, et spes nostra, salve. Ad te clamamus exsules filii Hevae. Ad te suspiramus, gementes et flentes in hac lacrimarum valle.",
+         "Eia, ergo, advocata nostra, illos tuos misericordes oculos ad nos converte. Et Iesum, benedictum fructum ventris tui, nobis post hoc exsilium ostende. O clemens, O pia, O dulcis Virgo Maria.",
+         ["V.", "Ora pro nobis, sancta Dei Genetrix."], ["R.", "Ut digni efficiamur promissionibus Christi."]]
+  },
+  oremus: {
+    de: ["Lasset uns beten. Allmächtiger Gott, dein eingeborener Sohn hat uns durch sein Leben, Sterben und Auferstehen den Lohn des ewigen Heiles erworben. Wir bitten dich: Lass uns, die wir diese Geheimnisse im heiligen Rosenkranz der seligen Jungfrau Maria betrachten, nachahmen, was sie enthalten, und erlangen, was sie verheißen. Durch Christus, unseren Herrn. Amen."],
+    en: ["Let us pray. O God, whose only begotten Son, by his life, death, and resurrection, has purchased for us the rewards of eternal life, grant, we beseech thee, that while meditating on these mysteries of the most holy Rosary of the Blessed Virgin Mary, we may imitate what they contain and obtain what they promise, through the same Christ our Lord. Amen."],
+    la: ["Oremus. Deus, cuius Unigenitus per vitam, mortem et resurrectionem suam nobis salutis aeternae praemia comparavit: concede, quaesumus, ut haec mysteria sacratissimo beatae Mariae Virginis Rosario recolentes, et imitemur quod continent, et quod promittunt assequamur. Per eundem Christum Dominum nostrum. Amen."]
+  }
+};
+
+function ave(lang, ins) {
+  if (lang === "de") return [
+    `Gegrüßet seist du, Maria, voll der Gnade, der Herr ist mit dir. Du bist gebenedeit unter den Frauen, und gebenedeit ist die Frucht deines Leibes, Jesus${ins ? `, <em>${ins}</em>` : ""}.`,
+    "Heilige Maria, Mutter Gottes, bitte für uns Sünder jetzt und in der Stunde unseres Todes. Amen."];
+  if (lang === "en") return [
+    "Hail Mary, full of grace, the Lord is with thee. Blessed art thou among women, and blessed is the fruit of thy womb, Jesus.",
+    "Holy Mary, Mother of God, pray for us sinners, now and at the hour of our death. Amen."];
+  return [
+    "Ave Maria, gratia plena, Dominus tecum. Benedicta tu in mulieribus, et benedictus fructus ventris tui, Iesus.",
+    "Sancta Maria, Mater Dei, ora pro nobis peccatoribus, nunc et in hora mortis nostrae. Amen."];
+}
+
+/* ---------- Sequence of steps ---------- */
+function buildSteps(fatima) {
+  const s = [];
+  s.push({ k: "o-sign", p: "sign", bead: "X", sec: "intro" });
+  s.push({ k: "o-creed", p: "creed", bead: "X", sec: "intro" });
+  s.push({ k: "o-pater", p: "pater", bead: "P1", sec: "intro" });
+  for (let i = 0; i < 3; i++) s.push({ k: "o-ave" + i, p: "ave", bead: "S" + i, sec: "intro", virtue: i, n: i + 1, of: 3 });
+  s.push({ k: "o-gloria", p: "gloria", bead: "P2", sec: "intro" });
+  for (let d = 0; d < 5; d++) {
+    const pb = d === 0 ? "P2" : "L" + (d - 1);
+    s.push({ k: `d${d}-myst`, p: "myst", bead: pb, d });
+    s.push({ k: `d${d}-pater`, p: "pater", bead: pb, d });
+    for (let a = 0; a < 10; a++) s.push({ k: `d${d}-ave${a}`, p: "ave", bead: `D${d}-${a}`, d, n: a + 1, of: 10 });
+    s.push({ k: `d${d}-gloria`, p: "gloria", bead: `D${d}-9`, d });
+    if (fatima) s.push({ k: `d${d}-fatima`, p: "fatima", bead: `D${d}-9`, d });
+  }
+  s.push({ k: "c-salve", p: "salve", bead: "M", sec: "end" });
+  s.push({ k: "c-oremus", p: "oremus", bead: "M", sec: "end" });
+  s.push({ k: "c-sign", p: "sign", bead: "X", sec: "end" });
+  return s;
+}
+
+/* ---------- State ---------- */
+const $ = id => document.getElementById(id);
+const todayKey = () => new Date().toISOString().slice(0, 10);
+const todaySet = () => SET_ORDER.find(k => SETS[k].days.includes(new Date().getDay()));
+
+let state = { lang: "de", set: todaySet(), trans: "", fatima: true, key: "o-sign", date: todayKey() };
+try {
+  const saved = JSON.parse(localStorage.getItem("rosarium") || "null");
+  if (saved) {
+    state.lang = saved.lang || state.lang;
+    state.trans = saved.trans ?? "";
+    state.fatima = saved.fatima ?? true;
+    if (saved.date === state.date) { state.set = saved.set || state.set; state.key = saved.key || state.key; }
+  }
+} catch (e) {}
+function save() { try { localStorage.setItem("rosarium", JSON.stringify(state)); } catch (e) {} }
+
+let steps = buildSteps(state.fatima);
+let cur = Math.max(0, steps.findIndex(s => s.k === state.key));
+
+/* ---------- Bead diagram ---------- */
+const SVGNS = "http://www.w3.org/2000/svg";
+const beadEls = {};
+let halo;
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function drawBeads() {
+  const svg = $("beads");
+  const cx = 150, cy = 148, R = 124;
+  el("circle", { cx, cy, r: R, class: "string" }, svg);
+  el("line", { x1: cx, y1: cy + R, x2: cx, y2: 420, class: "string" }, svg);
+  halo = el("circle", { r: 13, class: "halo", cx: -50, cy: -50 }, svg);
+
+  const loop = [];
+  for (let d = 0; d < 5; d++) {
+    for (let a = 0; a < 10; a++) loop.push({ id: `D${d}-${a}`, big: false });
+    if (d < 4) loop.push({ id: "L" + d, big: true });
+  }
+  const gap = 10, step = (360 - 2 * gap) / (loop.length - 1);
+  const pos = {};
+  loop.forEach((b, i) => {
+    const t = (90 + gap + i * step) * Math.PI / 180;
+    pos[b.id] = { x: cx + R * Math.cos(t), y: cy + R * Math.sin(t), r: b.big ? 7.5 : 5 };
+  });
+  pos.M = { x: cx, y: cy + R, medal: true };
+  pos.P2 = { x: cx, y: 304, r: 7.5 };
+  pos.S2 = { x: cx, y: 328, r: 5 };
+  pos.S1 = { x: cx, y: 346, r: 5 };
+  pos.S0 = { x: cx, y: 364, r: 5 };
+  pos.P1 = { x: cx, y: 390, r: 7.5 };
+  pos.X = { x: cx, y: 438, cross: true };
+
+  for (const id in pos) {
+    const p = pos[id];
+    const g = el("g", { class: "bead", "data-bead": id }, svg);
+    if (p.cross) {
+      el("rect", { x: p.x - 18, y: p.y - 26, width: 36, height: 56, class: "hit" }, g);
+      el("path", { d: `M${p.x} ${p.y - 22}V${p.y + 26}M${p.x - 13} ${p.y - 9}H${p.x + 13}`, class: "cross" }, g);
+    } else if (p.medal) {
+      el("circle", { cx: p.x, cy: p.y, r: 14, class: "hit" }, g);
+      el("ellipse", { cx: p.x, cy: p.y, rx: 8, ry: 10.5, class: "b" }, g);
+    } else {
+      el("circle", { cx: p.x, cy: p.y, r: p.r + 5, class: "hit" }, g);
+      el("circle", { cx: p.x, cy: p.y, r: p.r, class: "b" }, g);
+    }
+    g.addEventListener("click", e => {
+      e.stopPropagation();
+      const i = steps.findIndex(s => s.bead === id);
+      if (i >= 0) go(i);
+    });
+    beadEls[id] = { g, p };
+  }
+}
+
+/* ---------- Rendering ---------- */
+function para(x) {
+  if (Array.isArray(x)) return `<p><span class="vr">${x[0]}</span>${x[1]}</p>`;
+  return `<p>${x}</p>`;
+}
+function refText(ref, lang) {
+  if (!ref) return "";
+  const [b, c, v] = ref;
+  return `${BOOKS[b][lang]} ${c}${lang === "en" ? ":" : ","}${v}`;
+}
+function content(step, lang) {
+  const set = SETS[state.set];
+  if (step.p === "myst") {
+    const m = set.m[step.d];
+    const out = [];
+    if (lang === "de") out.push(`<em>Jesus, ${m.ins}.</em>`);
+    const r = refText(m.ref, lang);
+    if (r) out.push(`<span class="meta">${set.name[lang]} · ${r}</span>`);
+    else out.push(`<span class="meta">${set.name[lang]}</span>`);
+    return out;
+  }
+  if (step.p === "ave") {
+    let ins = null;
+    if (lang === "de") ins = step.virtue != null ? VIRTUES.de[step.virtue] : set.m[step.d].ins;
+    return ave(lang, ins);
+  }
+  return TEXT[step.p][lang];
+}
+
+function eyebrow(step, lang) {
+  if (step.sec === "intro") {
+    if (step.virtue != null && lang !== "de") return `${UI[lang].intro} · ${VIRTUES[lang][step.virtue]}`;
+    return UI[lang].intro;
+  }
+  if (step.sec === "end") return UI[lang].conclusion;
+  const m = SETS[state.set].m[step.d];
+  return step.p === "myst" ? `${ORD[lang](step.d)} · ${SETS[state.set].name[lang]}` : `${ORD[lang](step.d)} · ${m[lang]}`;
+}
+
+function render() {
+  const lang = state.lang, ui = UI[lang], step = steps[cur];
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-ui]").forEach(n => { n.textContent = ui[n.dataset.ui]; });
+  document.querySelectorAll("[data-lang]").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === lang));
+
+  $("set").innerHTML = SET_ORDER.map(k =>
+    `<option value="${k}"${k === state.set ? " selected" : ""}>${SETS[k].name[lang]} (${SETS[k].days.map(d => ui.days[d]).join(", ")})</option>`).join("");
+  $("trans").innerHTML = `<option value="">${ui.none}</option>` +
+    Object.keys(LANG_NAMES).filter(l => l !== lang).map(l => `<option value="${l}"${l === state.trans ? " selected" : ""}>${LANG_NAMES[l]}</option>`).join("");
+  $("fatima").checked = state.fatima;
+
+  $("eyebrow").textContent = eyebrow(step, lang);
+  $("name").textContent = step.p === "myst" ? SETS[state.set].m[step.d][lang] : NAMES[step.p][lang];
+  $("count").innerHTML = step.n ? `${step.n}<small> / ${step.of}</small>` : "";
+  $("body").innerHTML = content(step, lang).map(para).join("");
+
+  const tr = state.trans && state.trans !== lang ? state.trans : "";
+  $("transBody").hidden = !tr;
+  if (tr) {
+    const head = step.p === "myst" ? `<p>${SETS[state.set].m[step.d][tr]}</p>` : "";
+    $("transBody").innerHTML = head + content(step, tr).map(para).join("");
+  }
+
+  const pr = $("prayer");
+  pr.classList.remove("fade"); void pr.offsetWidth; pr.classList.add("fade");
+
+  // beads
+  const last = {};
+  steps.forEach((s, i) => { last[s.bead] = i; });
+  for (const id in beadEls) {
+    const g = beadEls[id].g;
+    g.classList.toggle("cur", id === step.bead);
+    g.classList.toggle("done", id !== step.bead && last[id] < cur);
+  }
+  const hp = beadEls[step.bead].p;
+  halo.setAttribute("cx", hp.x);
+  halo.setAttribute("cy", hp.y);
+  halo.setAttribute("r", hp.cross ? 26 : hp.medal ? 16 : (hp.r || 5) + 7);
+
+  const end = cur === steps.length - 1;
+  $("prev").disabled = cur === 0;
+  $("next").textContent = end ? ui.amen : ui.next;
+  $("next").disabled = end;
+  $("ptext").textContent = end ? ui.done : `${cur + 1} / ${steps.length}`;
+  $("pbar").style.width = `${(cur / (steps.length - 1)) * 100}%`;
+
+  state.key = step.k;
+  state.date = todayKey();
+  save();
+}
+
+function go(i) {
+  cur = Math.min(steps.length - 1, Math.max(0, i));
+  render();
+  wake();
+  if (window.matchMedia("(max-width: 780px)").matches) {
+    const top = $("prayer").getBoundingClientRect().top;
+    if (top < 0) window.scrollTo({ top: window.scrollY + top - 12, behavior: "smooth" });
+  }
+}
+
+/* ---------- Screen wake lock while praying ---------- */
+let lock = null;
+async function wake() {
+  if (lock || !("wakeLock" in navigator)) return;
+  try { lock = await navigator.wakeLock.request("screen"); lock.addEventListener("release", () => { lock = null; }); } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && cur > 0) wake(); });
+
+/* ---------- Events ---------- */
+document.querySelectorAll("[data-lang]").forEach(b => b.addEventListener("click", () => {
+  state.lang = b.dataset.lang;
+  if (state.trans === state.lang) state.trans = "";
+  render();
+}));
+$("set").addEventListener("change", e => { state.set = e.target.value; render(); });
+$("trans").addEventListener("change", e => { state.trans = e.target.value; render(); });
+$("fatima").addEventListener("change", e => {
+  const key = steps[cur].k;
+  state.fatima = e.target.checked;
+  steps = buildSteps(state.fatima);
+  let i = steps.findIndex(s => s.k === key);
+  if (i < 0) i = steps.findIndex(s => s.k === key.replace("fatima", "gloria"));
+  cur = Math.max(0, i);
+  render();
+});
+$("restart").addEventListener("click", () => { state.set = todaySet(); go(0); });
+$("prev").addEventListener("click", () => go(cur - 1));
+$("next").addEventListener("click", () => go(cur + 1));
+$("prayer").addEventListener("click", () => {
+  if (String(window.getSelection())) return;
+  go(cur + 1);
+});
+document.addEventListener("keydown", e => {
+  if (e.target.closest("select, input, button, textarea")) return;
+  if (e.key === " " || e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); go(cur + 1); }
+  else if (e.key === "ArrowLeft" || e.key === "Backspace") { e.preventDefault(); go(cur - 1); }
+});
+
+drawBeads();
+render();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
+</script>
+</body>
+</html>
