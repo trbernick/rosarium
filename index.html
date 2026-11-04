@@ -14,8 +14,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Rosarium">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Alegreya+Sans:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
 <style>
 /* Layout: bead diagram as a map on the left (top on phones), the current prayer as a page of text, a fixed bar to step forward. */
 :root {
@@ -49,15 +48,15 @@
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   -webkit-user-select: none;
   user-select: none;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--f-ui);
   font-size: 16px;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-left: max(16px, var(--safe-area-inset-left, env(safe-area-inset-left, 0px)));
+  padding-right: max(16px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
   padding-bottom: 0;
 }
 .wrap { max-width: 1040px; margin: 0 auto; padding-block: 20px 120px; display: flex; flex-direction: column; gap: 20px; }
@@ -83,7 +82,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
 .app { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 40px; align-items: start; }
-.map { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+.map { position: sticky; top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 16px); }
 .map svg { width: 100%; height: auto; max-height: 78vh; display: block; }
 .string { fill: none; stroke: var(--line); stroke-width: 1.2; }
 .bead { cursor: pointer; }
@@ -118,9 +117,9 @@ h2 { font-family: var(--f-display); font-weight: 500; font-size: clamp(1.5rem, 3
 .bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
   background: var(--surface); border-top: 1px solid var(--line);
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, var(--safe-area-inset-left, env(safe-area-inset-left, 0px)));
+  padding-right: max(16px, var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+  padding-top: 12px; padding-bottom: calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
 }
 .bar-in { max-width: 1040px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; }
 .bar button {
@@ -531,8 +530,14 @@ function go(i) {
 }
 
 /* ---------- Screen wake lock while praying ---------- */
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
 let lock = null;
 async function wake() {
+  if (NATIVE) {
+    if (lock) return;
+    try { await window.capacitorKeepAwake.KeepAwake.keepAwake(); lock = true; } catch (e) {}
+    return;
+  }
   if (lock || !("wakeLock" in navigator)) return;
   try { lock = await navigator.wakeLock.request("screen"); lock.addEventListener("release", () => { lock = null; }); } catch (e) {}
 }
@@ -571,7 +576,7 @@ document.addEventListener("keydown", e => {
 drawBeads();
 render();
 
-if ("serviceWorker" in navigator) {
+if (!NATIVE && "serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
 </script>

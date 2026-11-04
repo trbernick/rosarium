@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rosarium</string>
+    <string name="title_activity_main">Rosarium</string>
+    <string name="package_name">io.trbe.rosarium</string>
+    <string name="custom_url_scheme">io.trbe.rosarium</string>
+</resources>

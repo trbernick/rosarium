@@ -1,0 +1,14 @@
+{
+  "appId": "io.trbe.rosarium",
+  "appName": "Rosarium",
+  "webDir": "www",
+  "backgroundColor": "#ECEFF4",
+  "ios": {
+    "contentInset": "never"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css"
+    }
+  }
+}
